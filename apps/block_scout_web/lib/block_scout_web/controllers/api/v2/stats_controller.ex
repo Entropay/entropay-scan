@@ -25,6 +25,7 @@ defmodule BlockScoutWeb.API.V2.StatsController do
   alias Explorer.{Chain, Market}
   alias Explorer.Chain.Cache.Counters.{AddressesCount, AverageBlockTime, BlocksCount, GasUsageSum, TransactionsCount}
   alias Explorer.Chain.Cache.GasPriceOracle
+  alias Explorer.Chain.Wei
   alias Explorer.Chain.Supply.RSK
   alias Explorer.Chain.Transaction.History.TransactionStats
   alias Explorer.Stats.HotSmartContracts
@@ -66,6 +67,8 @@ defmodule BlockScoutWeb.API.V2.StatsController do
 
     transaction_stats = Helper.get_transaction_stats()
 
+    gas_price = Application.get_env(:block_scout_web, :gas_price)
+
     gas_prices =
       case GasPriceOracle.get_gas_prices() do
         {:ok, gas_prices} ->
@@ -74,6 +77,7 @@ defmodule BlockScoutWeb.API.V2.StatsController do
         _ ->
           nil
       end
+      |> maybe_override_gas_prices(gas_price)
 
     coin_price_change =
       case Market.fetch_recent_history() do
@@ -89,8 +93,6 @@ defmodule BlockScoutWeb.API.V2.StatsController do
         _ ->
           nil
       end
-
-    gas_price = Application.get_env(:block_scout_web, :gas_price)
 
     json(
       conn,
@@ -119,6 +121,56 @@ defmodule BlockScoutWeb.API.V2.StatsController do
       |> add_chain_identity_fields()
       |> backward_compatibility(conn)
     )
+  end
+
+  defp maybe_override_gas_prices(nil, gas_price) do
+    gas_prices_from_static(gas_price)
+  end
+
+  defp maybe_override_gas_prices(%{slow: slow, average: average, fast: fast} = gas_prices, gas_price) do
+    if zero_gas_price?(slow) and zero_gas_price?(average) and zero_gas_price?(fast) do
+      gas_prices_from_static(gas_price) || gas_prices
+    else
+      gas_prices
+    end
+  end
+
+  defp maybe_override_gas_prices(gas_prices, _gas_price), do: gas_prices
+
+  defp zero_gas_price?(nil), do: true
+  defp zero_gas_price?(%{price: price}) when is_number(price), do: price <= 0
+  defp zero_gas_price?(_), do: false
+
+  defp gas_prices_from_static(nil), do: nil
+  defp gas_prices_from_static(""), do: nil
+
+  defp gas_prices_from_static(gas_price) do
+    with {:ok, wei} <- Wei.cast(gas_price) do
+      gwei =
+        wei
+        |> Wei.to(:gwei)
+        |> Decimal.round(8)
+        |> Decimal.to_float()
+
+      wei_value =
+        wei
+        |> Wei.to(:wei)
+        |> Decimal.round()
+
+      price = %{
+        price: gwei,
+        time: nil,
+        fiat_price: nil,
+        base_fee: nil,
+        priority_fee: nil,
+        priority_fee_wei: nil,
+        wei: wei_value
+      }
+
+      %{slow: price, average: price, fast: price}
+    else
+      _ -> nil
+    end
   end
 
   defp network_utilization_percentage do
