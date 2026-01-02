@@ -9,3 +9,8 @@ services:
     container_name: 'frontend'
     env_file:
       -  ../envs/common-frontend.env
+    volumes:
+      - /home/entropay-scan/branding/icons/sprite.9aac2f78.svg:/app/public/icons/sprite.9aac2f78.svg:ro
+      - /home/entropay-scan/branding/patch_frontend_branding.sh:/app/patch_frontend_branding.sh:ro
+      - /home/entropay-scan/branding/entrypoint.sh:/app/entrypoint.sh:ro
+    command: ["node", "server.js"]
