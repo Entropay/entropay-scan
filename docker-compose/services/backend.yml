@@ -13,5 +13,5 @@ services:
     env_file:
       -  ../envs/common-blockscout.env
     volumes:
-      - ./logs/:/app/logs/
-      - ./dets/:/app/dets/
+      - /var/log/entropay-scan:/app/logs/
+      - /home/entropay-scan/docker-compose/dets:/app/dets/
